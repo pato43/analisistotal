@@ -78,14 +78,14 @@ def calc_ingresos(row):
         sem = int(row.DuraciónSemanas if pd.notna(row.DuraciónSemanas) else 8)
         return row.PrecioUnidadMXN * sem * row.Estudiantes
 
-def dirichlet_pct(alpha=[4,2,3,1]):
+def dirichlet_pct(alpha=[8,4,6,2]):
+    """Devuelve ~[40,20,30,10] sesgado por alpha, y ajusta suma=100."""
     p = np.random.dirichlet(alpha)
     vals = np.round(p * 100, 0).astype(int)
-    # Ajuste para asegurar suma=100
     diff = 100 - vals.sum()
     vals[0] += diff
     vals = np.clip(vals, 0, 100)
-    return vals.tolist()  # [debito, credito, transferencia, paypal]
+    return vals.tolist()  # [debito, credito, transfer, paypal]
 
 # ---------- Datos de ejemplo (más realistas) ----------
 def seed_data():
@@ -127,8 +127,8 @@ def seed_data():
             for m in chosen_months:
                 est_min, est_max = ranges[prog]
                 n_est = int(np.random.randint(est_min, est_max + 1))
-                # pagos aleatorios (centrados en 40/20/30/10 por defectos via Dirichlet)
-                pct_deb, pct_cre, pct_tra, pct_pay = dirichlet_pct([8,4,6,2])  # sesgo a 40/20/30/10
+                # pagos aleatorios (centrados en 40/20/30/10 por defecto)
+                pct_deb, pct_cre, pct_tra, pct_pay = dirichlet_pct([8,4,6,2])
                 colocados = int(np.random.randint(0, max(1, int(n_est * 0.55))))  # hasta ~55%
 
                 rows.append([
@@ -173,7 +173,35 @@ with st.sidebar:
     with col_a:
         theme_graphs = st.selectbox("Apariencia gráficos", ["Claro","Oscuro"], index=0)
     with col_b:
-        modo_externo = st.toggle("Modo externo", value=False, help="Oculta edición y notas para presentar a clientes/aliados.")
+        modo_externo = st.toggle("Modo externo", value=True, help="Oculta edición y notas para presentar a clientes/aliados.")
+
+    # Agregar edición (solo interno)
+    if not modo_externo:
+        with st.expander("➕ Agregar edición rápidamente"):
+            c1,c2 = st.columns(2)
+            with c1:
+                y_new = st.selectbox("Año nuevo", sorted(df["Año"].unique()), key="y_new")
+                prog_new = st.selectbox("Programa nuevo", [p[0] for p in PROGRAMAS], key="prog_new")
+                mes_new = st.selectbox("Mes", MONTHS, key="mes_new")
+                est_new = st.number_input("Estudiantes", 5, 500, 25, key="est_new")
+            with c2:
+                canal_new = st.selectbox("Canal", CANALES, key="canal_new")
+                region_new = st.selectbox("Región", REGIONES, key="reg_new")
+                disc_new = st.selectbox("Disciplina", DISCIP, key="disc_new")
+                fecha_new = date(y_new, MONTHS.index(mes_new)+1, 1)
+            if st.button("Agregar edición", use_container_width=True):
+                P = {p[0]:p for p in PROGRAMAS}[prog_new]
+                new_row = {
+                    "FechaInicio": fecha_new, "Año": y_new, "MesNum": MONTHS.index(mes_new)+1, "Mes": mes_new,
+                    "Programa": P[0], "Modalidad": P[1], "UnidadPrecio": P[2], "PrecioUnidadMXN": P[3],
+                    "DuraciónMeses": P[4], "DuraciónSemanas": P[5], "Estudiantes": est_new,
+                    "CanalDominante": canal_new, "Region": region_new, "Disciplina": disc_new,
+                    "Edición": f"{prog_new[:3].upper()}-{y_new}-{MONTHS.index(mes_new)+1}",
+                    "PctDebito": 40, "PctCredito": 20, "PctTransfer": 30, "PctPayPal": 10,
+                    "Colocados": 0
+                }
+                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_row])], ignore_index=True)
+                st.toast("Edición agregada ✅")
 
 # ---------- Encabezado ----------
 st.markdown(
@@ -192,29 +220,56 @@ if f.empty:
     st.warning("No hay datos con los filtros actuales. Ajusta opciones en la barra lateral.")
     st.stop()
 
-# ---------- Derivados ----------
+# ---------- Derivados (robustos a NaN/strings) ----------
 def normalize_row_pcts(row):
-    p = np.array([row.PctDebito, row.PctCredito, row.PctTransfer, row.PctPayPal], dtype=float)
-    s = p.sum()
-    if s <= 0:
-        p = np.array([40,20,30,10], dtype=float)
-        s = 100
+    # Lee seguro (vacíos/strings -> 0), limita a [0,100] y normaliza a 100
+    vals = []
+    for c in ["PctDebito","PctCredito","PctTransfer","PctPayPal"]:
+        v = row.get(c, 0)
+        try:
+            v = float(v)
+        except Exception:
+            v = 0.0
+        vals.append(max(0.0, min(100.0, v)))
+
+    p = np.array(vals, dtype=float)
+    s = np.nansum(p)
+
+    # Si todo está vacío/0/NaN, usa 40/20/30/10 por defecto
+    if not np.isfinite(s) or s <= 0:
+        p = np.array([40, 20, 30, 10], dtype=float)
+        s = 100.0
+
     p = p / s * 100.0
-    # redondeo y ajuste final a 100
     r = np.round(p).astype(int)
+    # Ajuste final para que sume 100
     r[0] += (100 - r.sum())
+    r = np.clip(r, 0, 100)
     return r
 
+# Tipos seguros básicos
+f["Estudiantes"] = pd.to_numeric(f["Estudiantes"], errors="coerce").fillna(0).astype(int)
+for c in ["PctDebito","PctCredito","PctTransfer","PctPayPal"]:
+    f[c] = pd.to_numeric(f[c], errors="coerce").fillna(0)
+
+# Porcentajes normalizados por fila (N = normalizado)
 pcts = f.apply(normalize_row_pcts, axis=1, result_type="expand")
 pcts.columns = ["PctDebitoN","PctCreditoN","PctTransferN","PctPayPalN"]
 f = pd.concat([f.reset_index(drop=True), pcts], axis=1)
 
-# Ingresos
+# Ingresos estimados
 f["IngresosMXN"] = f.apply(calc_ingresos, axis=1)
 
-# Conteo de estudiantes por método de pago
-for col, pct_col in [("Debito","PctDebitoN"),("Credito","PctCreditoN"),("Transfer","PctTransferN"),("PayPal","PctPayPalN")]:
-    f[f"Est_{col}"] = (f["Estudiantes"] * f[pct_col] / 100.0).round().astype(int)
+# Estudiantes por método de pago (a prueba de NaN/strings)
+est = pd.to_numeric(f["Estudiantes"], errors="coerce").fillna(0)
+for col, pct_col in [
+    ("Debito","PctDebitoN"),
+    ("Credito","PctCreditoN"),
+    ("Transfer","PctTransferN"),
+    ("PayPal","PctPayPalN")
+]:
+    p = pd.to_numeric(f[pct_col], errors="coerce").fillna(0)
+    f[f"Est_{col}"] = ((est * p / 100.0).round()).astype(int)
 
 # ---------- KPIs ----------
 tpl = px_template(theme_graphs)
@@ -233,8 +288,9 @@ with c4:
     st.markdown("<div class='box kpi'><div><h4>Programa líder</h4>"
                 f"<div class='val'>{top_prog}</div></div></div>", unsafe_allow_html=True)
 with c5:
-    coloc_tot = int(f["Colocados"].sum())
-    tasa_coloc = (coloc_tot / f["Estudiantes"].sum() * 100) if f["Estudiantes"].sum() > 0 else 0
+    coloc_tot = int(pd.to_numeric(f["Colocados"], errors="coerce").fillna(0).sum())
+    total_est = int(f["Estudiantes"].sum())
+    tasa_coloc = (coloc_tot / total_est * 100) if total_est > 0 else 0
     st.markdown("<div class='box kpi'><div><h4>Empleabilidad</h4>"
                 f"<div class='val'>{tasa_coloc:.1f}%</div><div class='small'>{coloc_tot} colocados</div></div></div>", unsafe_allow_html=True)
 
@@ -274,13 +330,11 @@ with tabs[0]:
 
     # Conclusiones rápidas
     st.markdown("### 📌 Conclusiones")
-    total_est = int(f["Estudiantes"].sum())
-    total_ing = int(f["IngresosMXN"].sum())
     top_region = f.groupby("Region")["Estudiantes"].sum().sort_values(ascending=False).index[0]
     top_canal = f.groupby("CanalDominante")["Estudiantes"].sum().sort_values(ascending=False).index[0]
     st.markdown(f"""
 - **Total estudiantes {year}:** {total_est:,}
-- **Ingresos estimados:** ${total_ing:,.0f} MXN
+- **Ingresos estimados:** ${int(f["IngresosMXN"].sum()):,} MXN
 - **Programa líder:** {top_prog}
 - **Región más activa:** {top_region}
 - **Canal dominante:** {top_canal}
@@ -320,23 +374,47 @@ with tabs[1]:
         c1, c2 = st.columns([1,1])
         with c1:
             if st.button("Aplicar cambios a la base", type="primary"):
-                # Fusionar por edición
                 base = st.session_state.df
-                cols_update = ["Estudiantes","PrecioUnidadMXN","PctDebito","PctCredito","PctTransfer","PctPayPal","Colocados","CanalDominante","Region"]
-                merged = base.merge(edit_df[["Edición"]+cols_update], on="Edición", how="left", suffixes=("","_new"))
+
+                cols_update = [
+                    "Estudiantes","PrecioUnidadMXN",
+                    "PctDebito","PctCredito","PctTransfer","PctPayPal",
+                    "Colocados","CanalDominante","Region"
+                ]
+                merged = base.merge(edit_df[["Edición"] + cols_update], on="Edición", how="left", suffixes=("","_new"))
+
+                # Aplica valores nuevos cuando existan
                 for col in cols_update:
                     merged[col] = np.where(merged[col+"_new"].notna(), merged[col+"_new"], merged[col])
                     merged.drop(columns=[col+"_new"], inplace=True)
 
-                # normalizar porcentajes a 100 por edición y clips
+                # Tipos seguros
+                merged["Estudiantes"]     = pd.to_numeric(merged["Estudiantes"], errors="coerce").fillna(0).astype(int)
+                merged["PrecioUnidadMXN"] = pd.to_numeric(merged["PrecioUnidadMXN"], errors="coerce").fillna(0).astype(int)
+                for c in ["PctDebito","PctCredito","PctTransfer","PctPayPal","Colocados"]:
+                    merged[c] = pd.to_numeric(merged[c], errors="coerce").fillna(0)
+
+                # Normaliza % a 100 y recorta Colocados ≤ Estudiantes
                 for i, row in merged.iterrows():
-                    p = np.array([row["PctDebito"], row["PctCredito"], row["PctTransfer"], row["PctPayPal"]], dtype=float)
+                    p = np.array([
+                        row.get("PctDebito", 0.0),
+                        row.get("PctCredito", 0.0),
+                        row.get("PctTransfer", 0.0),
+                        row.get("PctPayPal", 0.0)
+                    ], dtype=float)
+                    p = np.nan_to_num(p, nan=0.0)
                     s = p.sum()
-                    if s <= 0: p = np.array([40,20,30,10], dtype=float); s = 100
+                    if s <= 0:
+                        p = np.array([40,20,30,10], dtype=float)
+                        s = 100.0
                     p = p / s * 100.0
-                    r = np.round(p).astype(int); r[0] += (100 - r.sum())
+                    r = np.round(p).astype(int)
+                    r[0] += (100 - r.sum())
+                    r = np.clip(r, 0, 100)
+
                     merged.loc[i, ["PctDebito","PctCredito","PctTransfer","PctPayPal"]] = r
-                    merged.loc[i, "Colocados"] = min(int(merged.loc[i, "Colocados"]), int(merged.loc[i, "Estudiantes"]))
+                    merged.loc[i, "Colocados"] = min(int(row.get("Colocados", 0)), int(row.get("Estudiantes", 0)))
+
                 st.session_state.df = merged
                 st.toast("Cambios aplicados ✅")
                 st.rerun()
@@ -407,8 +485,10 @@ with tabs[4]:
     emp["Tasa"] = np.where(emp["Estudiantes"]>0, emp["Colocados"]/emp["Estudiantes"]*100, 0)
     figEmp = px.bar(emp.sort_values("Tasa"), x="Tasa", y="Programa", orientation="h",
                     template=tpl, color_discrete_sequence=PALETTE, text=emp["Tasa"].map(lambda x:f"{x:.1f}%"))
-    figEmp.update_traces(hovertemplate="%{y}<br>Tasa: %{x:.1f}%<br>Colocados: %{customdata[0]:,} / %{customdata[1]:,}",
-                         customdata=np.stack([emp["Colocados"], emp["Estudiantes"]], axis=1))
+    figEmp.update_traces(
+        hovertemplate="%{y}<br>Tasa: %{x:.1f}%<br>Colocados: %{customdata[0]:,} / %{customdata[1]:,}",
+        customdata=np.stack([emp["Colocados"], emp["Estudiantes"]], axis=1)
+    )
     figEmp.update_layout(height=max(260, 30*len(emp)), margin=dict(t=30,b=10,l=10,r=10), xaxis_title="Tasa de colocación (%)")
     right.markdown("**Empleabilidad por programa**")
     right.plotly_chart(figEmp, use_container_width=True)
