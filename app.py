@@ -78,20 +78,10 @@ def calc_ingresos(row):
         sem = int(row.DuraciónSemanas if pd.notna(row.DuraciónSemanas) else 8)
         return row.PrecioUnidadMXN * sem * row.Estudiantes
 
-def dirichlet_pct(alpha=[8,4,6,2]):
-    """Devuelve ~[40,20,30,10] sesgado por alpha, y ajusta suma=100."""
-    p = np.random.dirichlet(alpha)
-    vals = np.round(p * 100, 0).astype(int)
-    diff = 100 - vals.sum()
-    vals[0] += diff
-    vals = np.clip(vals, 0, 100)
-    return vals.tolist()  # [debito, credito, transfer, paypal]
-
-# ---------- Datos de ejemplo (más realistas) ----------
+# ---------- Datos de ejemplo (más realistas, 2022 reducido) ----------
 def seed_data():
     np.random.seed(42)
 
-    # meses típicos por programa (0-index de MONTHS)
     starts = {
         "Data Science": [1, 7],                # Feb, Ago
         "Análisis de Datos": [2, 8],           # Mar, Sep
@@ -100,8 +90,6 @@ def seed_data():
         "MCP Avanzado (AI+MCP)": [4, 8],       # May, Sep
         "Bootcamp IA/Datos (Intensivo)": [0, 6]# Ene, Jul
     }
-
-    # rangos de estudiantes por programa (para no inflar ingresos)
     ranges = {
         "Data Science": (12, 28),
         "Análisis de Datos": (15, 40),
@@ -110,25 +98,30 @@ def seed_data():
         "MCP Avanzado (AI+MCP)": (8, 22),
         "Bootcamp IA/Datos (Intensivo)": (8, 18),
     }
-
     years = [2022, 2023, 2024, 2025]
+    year_scale = {2022: 0.55, 2023: 0.85, 2024: 1.0, 2025: 1.0}  # 🔻 baja 2022
+
     rows = []
     prog_map = {p[0]: p for p in PROGRAMAS}
 
     for y in years:
-        # cada año se ofrece un subconjunto aleatorio de programas (1 a 4)
-        offered = np.random.choice([p[0] for p in PROGRAMAS], size=np.random.randint(1, 5), replace=False)
+        offered_size = np.random.randint(1, 3) if y == 2022 else np.random.randint(1, 5)
+        offered = np.random.choice([p[0] for p in PROGRAMAS], size=offered_size, replace=False)
         for prog in offered:
             P = prog_map[prog]
-            # de los starts posibles, tomar 1 (a veces 2) fechas para ese año
             starts_for_prog = starts[prog]
-            n_ed = 1 if np.random.rand() < 0.7 else 2
+            n_ed = 1 if y == 2022 else (1 if np.random.rand() < 0.7 else 2)
             chosen_months = np.random.choice(starts_for_prog, size=n_ed, replace=False)
             for m in chosen_months:
                 est_min, est_max = ranges[prog]
-                n_est = int(np.random.randint(est_min, est_max + 1))
-                # pagos aleatorios (centrados en 40/20/30/10 por defecto)
-                pct_deb, pct_cre, pct_tra, pct_pay = dirichlet_pct([8,4,6,2])
+                raw = np.random.randint(est_min, est_max + 1)
+                n_est = max(5, int(raw * year_scale.get(y, 1.0)))  # escala por año
+
+                # Mezcla de pagos ~40/20/30/10
+                p = np.random.dirichlet([8, 4, 6, 2])
+                pct_deb, pct_cre, pct_tra, pct_pay = np.round(p * 100).astype(int)
+                pct_deb += (100 - (pct_deb + pct_cre + pct_tra + pct_pay))  # ajuste suma=100
+
                 colocados = int(np.random.randint(0, max(1, int(n_est * 0.55))))  # hasta ~55%
 
                 rows.append([
@@ -138,7 +131,7 @@ def seed_data():
                     np.random.choice(REGIONES, p=[.55,.09,.07,.05,.09,.05,.03,.07]),
                     np.random.choice(DISCIP, p=[.52,.08,.11,.07,.07,.10,.05]),
                     f"{prog[:3].upper()}-{y}-{m+1}",
-                    pct_deb, pct_cre, pct_tra, pct_pay,
+                    int(pct_deb), int(pct_cre), int(pct_tra), int(pct_pay),
                     colocados
                 ])
 
@@ -147,7 +140,7 @@ def seed_data():
             "PctDebito","PctCredito","PctTransfer","PctPayPal","Colocados"]
     df = pd.DataFrame(rows, columns=cols)
 
-    # asegurar límites y consistencia
+    # Consistencia
     df[["PctDebito","PctCredito","PctTransfer","PctPayPal"]] = df[["PctDebito","PctCredito","PctTransfer","PctPayPal"]].clip(0,100)
     df["Colocados"] = df[["Colocados","Estudiantes"]].min(axis=1)
     return df
@@ -257,8 +250,10 @@ pcts = f.apply(normalize_row_pcts, axis=1, result_type="expand")
 pcts.columns = ["PctDebitoN","PctCreditoN","PctTransferN","PctPayPalN"]
 f = pd.concat([f.reset_index(drop=True), pcts], axis=1)
 
-# Ingresos estimados
-f["IngresosMXN"] = f.apply(calc_ingresos, axis=1)
+# Ingresos estimados (numérico seguro)
+f["IngresosMXN"] = pd.to_numeric(
+    f.apply(calc_ingresos, axis=1), errors="coerce"
+).replace([np.inf, -np.inf], np.nan).fillna(0.0)
 
 # Estudiantes por método de pago (a prueba de NaN/strings)
 est = pd.to_numeric(f["Estudiantes"], errors="coerce").fillna(0)
@@ -329,7 +324,6 @@ with tabs[0]:
     cB.caption("Evolución de estudiantes durante el año seleccionado.")
 
     # Conclusiones rápidas
-    st.markdown("### 📌 Conclusiones")
     top_region = f.groupby("Region")["Estudiantes"].sum().sort_values(ascending=False).index[0]
     top_canal = f.groupby("CanalDominante")["Estudiantes"].sum().sort_values(ascending=False).index[0]
     st.markdown(f"""
@@ -354,7 +348,6 @@ with tabs[1]:
     ]
     base_table = f[show_cols].copy()
 
-    # configs
     cfg = {
         "Estudiantes": st.column_config.NumberColumn(min_value=1, max_value=1000, step=1),
         "PrecioUnidadMXN": st.column_config.NumberColumn(min_value=100, max_value=10000, step=50),
@@ -375,7 +368,6 @@ with tabs[1]:
         with c1:
             if st.button("Aplicar cambios a la base", type="primary"):
                 base = st.session_state.df
-
                 cols_update = [
                     "Estudiantes","PrecioUnidadMXN",
                     "PctDebito","PctCredito","PctTransfer","PctPayPal",
@@ -514,7 +506,12 @@ with tabs[6]:
     with t1:
         st.markdown("**Tabla base (con ingresos y pagos normalizados)**")
         show = f.copy()
-        show["IngresosMXN"] = show["IngresosMXN"].round(0).astype(int)
+        # A prueba de NaN/inf antes de convertir a int
+        show["IngresosMXN"] = pd.to_numeric(show["IngresosMXN"], errors="coerce") \
+            .replace([np.inf, -np.inf], np.nan) \
+            .fillna(0) \
+            .round(0) \
+            .astype("int64")
         show = show.sort_values(["MesNum","Programa"])
         st.dataframe(show, use_container_width=True, hide_index=True)
         st.download_button("Descargar CSV filtrado", show.to_csv(index=False).encode("utf-8"),
