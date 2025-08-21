@@ -10,11 +10,11 @@ import plotly.graph_objects as go
 # ---------- Config base ----------
 st.set_page_config(page_title="Dashboard de Cursos — AleteIA / TESSENA", layout="wide")
 
-# ---------- Estilos (auto claro/oscuro) ----------
+# ---------- Estilos ----------
 CSS = """
 <style>
 :root{
-  --bg: #ffffff; --text:#0f172a; --muted:#64748b; --card:#ffffff;
+  --bg:#ffffff; --text:#0f172a; --muted:#64748b; --card:#ffffff;
   --border:#e2e8f0; --primary:#1e88e5; --chipbg:#e8f2ff; --chipfg:#0b57d0;
 }
 @media (prefers-color-scheme: dark){
@@ -42,7 +42,7 @@ hr.sep{ height:1px; border:none; margin:14px 0; background:linear-gradient(90deg
 """
 st.markdown(CSS, unsafe_allow_html=True)
 
-# ---------- Estado / datos iniciales ----------
+# ---------- Catálogos ----------
 PROGRAMAS = [
     ("Data Science", "Curso 6 meses", "MES", 1500, 6, None),
     ("Análisis de Datos", "Taller 8 semanas", "SEM", 700, None, 8),
@@ -56,63 +56,7 @@ CANALES  = ["Influencers (micro)","Referidos","Grupos Facebook","LinkedIn"]
 DISCIP   = ["STEM","Derecho","Economía","Sociología","Diseño","Administración","Profesorado"]
 MONTHS   = ["Ene","Feb","Mar","Abr","May","Jun","Jul","Ago","Sep","Oct","Nov","Dic"]
 
-def seed_data():
-    np.random.seed(11)
-    rows = []
-    bands = {2022:(20,30), 2023:(40,80), 2024:(80,160), 2025:(100,200)}
-    def ri(a,b): return int(np.random.randint(a,b+1))
-    def pick(arr, p=None):
-        if p is None: return np.random.choice(arr)
-        return np.random.choice(arr, p=p)
-
-    prog_map = {p[0]:p for p in PROGRAMAS}
-    for y in [2022,2023,2024,2025]:
-        if y==2022:
-            for (prog, m) in [("Data Science",4), ("Excel Básico & Analítica",10)]:
-                P = prog_map[prog]; n = ri(*bands[y])
-                rows.append([date(y, m+1, 1), y, m+1, MONTHS[m], *P, n, pick(CANALES, [0.7,0.12,0.1,0.08]),
-                             pick(REGIONES,[.66,.07,.06,.04,.06,.03,.02,.06]), pick(DISCIP, [.55,.08,.1,.07,.07,.08,.05]),
-                             f"{prog[:3].upper()}-{y}-1"])
-        if y==2023:
-            for (prog, m) in [("Data Science",2),("Análisis de Datos",7),("Desarrollo Web No-Code",9)]:
-                P = prog_map[prog]; n = ri(*bands[y])
-                rows.append([date(y, m+1, 1), y, m+1, MONTHS[m], *P, n, pick(CANALES, [0.7,0.12,0.1,0.08]),
-                             pick(REGIONES,[.66,.07,.06,.04,.06,.03,.02,.06]), pick(DISCIP, [.55,.08,.1,.07,.07,.08,.05]),
-                             f"{prog[:3].upper()}-{y}-1"])
-        if y==2024:
-            for (prog, m) in [("Bootcamp IA/Datos (Intensivo)",0),("MCP Avanzado (AI+MCP)",4),
-                              ("Excel Básico & Analítica",6),("Desarrollo Web No-Code",9)]:
-                P = prog_map[prog]; n = ri(*bands[y])
-                rows.append([date(y, m+1, 1), y, m+1, MONTHS[m], *P, n, pick(CANALES, [0.7,0.12,0.1,0.08]),
-                             pick(REGIONES,[.66,.07,.06,.04,.06,.03,.02,.06]), pick(DISCIP, [.55,.08,.1,.07,.07,.08,.05]),
-                             f"{prog[:3].upper()}-{y}-1"])
-        if y==2025:
-            for (prog, m) in [("Bootcamp IA/Datos (Intensivo)",0),("Análisis de Datos",3),
-                              ("MCP Avanzado (AI+MCP)",5),("Excel Básico & Analítica",7),("Data Science",9)]:
-                P = prog_map[prog]; n = ri(*bands[y])
-                rows.append([date(y, m+1, 1), y, m+1, MONTHS[m], *P, n, pick(CANALES, [0.7,0.12,0.1,0.08]),
-                             pick(REGIONES,[.66,.07,.06,.04,.06,.03,.02,.06]), pick(DISCIP, [.55,.08,.1,.07,.07,.08,.05]),
-                             f"{prog[:3].upper()}-{y}-1"])
-    cols = ["FechaInicio","Año","MesNum","Mes","Programa","Modalidad","UnidadPrecio","PrecioUnidadMXN",
-            "DuraciónMeses","DuraciónSemanas","Estudiantes","CanalDominante","Region","Disciplina","Edición"]
-    return pd.DataFrame(rows, columns=cols)
-
-if "df" not in st.session_state:
-    st.session_state.df = seed_data()
-if "notes" not in st.session_state:
-    st.session_state.notes = []
-
-df = st.session_state.df
-
 # ---------- Utilidades ----------
-def calc_ingresos(row):
-    if row.UnidadPrecio == "MES":
-        meses = int(row.DuraciónMeses if pd.notna(row.DuraciónMeses) else 6)
-        return row.PrecioUnidadMXN * meses * row.Estudiantes
-    else:
-        sem = int(row.DuraciónSemanas if pd.notna(row.DuraciónSemanas) else 8)
-        return row.PrecioUnidadMXN * sem * row.Estudiantes
-
 def k_formatter(x):
     if x >= 1_000_000: return f"{x/1_000_000:.2f}M"
     if x >= 1_000: return f"{x/1_000:.1f}k"
@@ -122,11 +66,99 @@ def chips(items):
     return " ".join([f"<span class='badge'>{x}</span>" for x in items])
 
 def px_template(theme_choice: str):
-    if theme_choice == "Oscuro":
-        return "plotly_dark"
-    return "plotly_white"
+    return "plotly_dark" if theme_choice == "Oscuro" else "plotly_white"
 
 PALETTE = ["#1e88e5","#43a047","#fb8c00","#8e24aa","#00acc1","#ef5350","#3949ab","#00897b"]
+
+def calc_ingresos(row):
+    if row.UnidadPrecio == "MES":
+        meses = int(row.DuraciónMeses if pd.notna(row.DuraciónMeses) else 6)
+        return row.PrecioUnidadMXN * meses * row.Estudiantes
+    else:
+        sem = int(row.DuraciónSemanas if pd.notna(row.DuraciónSemanas) else 8)
+        return row.PrecioUnidadMXN * sem * row.Estudiantes
+
+def dirichlet_pct(alpha=[4,2,3,1]):
+    p = np.random.dirichlet(alpha)
+    vals = np.round(p * 100, 0).astype(int)
+    # Ajuste para asegurar suma=100
+    diff = 100 - vals.sum()
+    vals[0] += diff
+    vals = np.clip(vals, 0, 100)
+    return vals.tolist()  # [debito, credito, transferencia, paypal]
+
+# ---------- Datos de ejemplo (más realistas) ----------
+def seed_data():
+    np.random.seed(42)
+
+    # meses típicos por programa (0-index de MONTHS)
+    starts = {
+        "Data Science": [1, 7],                # Feb, Ago
+        "Análisis de Datos": [2, 8],           # Mar, Sep
+        "Desarrollo Web No-Code": [3, 9],      # Abr, Oct
+        "Excel Básico & Analítica": [0, 6, 9], # Ene, Jul, Oct
+        "MCP Avanzado (AI+MCP)": [4, 8],       # May, Sep
+        "Bootcamp IA/Datos (Intensivo)": [0, 6]# Ene, Jul
+    }
+
+    # rangos de estudiantes por programa (para no inflar ingresos)
+    ranges = {
+        "Data Science": (12, 28),
+        "Análisis de Datos": (15, 40),
+        "Desarrollo Web No-Code": (10, 28),
+        "Excel Básico & Analítica": (12, 38),
+        "MCP Avanzado (AI+MCP)": (8, 22),
+        "Bootcamp IA/Datos (Intensivo)": (8, 18),
+    }
+
+    years = [2022, 2023, 2024, 2025]
+    rows = []
+    prog_map = {p[0]: p for p in PROGRAMAS}
+
+    for y in years:
+        # cada año se ofrece un subconjunto aleatorio de programas (1 a 4)
+        offered = np.random.choice([p[0] for p in PROGRAMAS], size=np.random.randint(1, 5), replace=False)
+        for prog in offered:
+            P = prog_map[prog]
+            # de los starts posibles, tomar 1 (a veces 2) fechas para ese año
+            starts_for_prog = starts[prog]
+            n_ed = 1 if np.random.rand() < 0.7 else 2
+            chosen_months = np.random.choice(starts_for_prog, size=n_ed, replace=False)
+            for m in chosen_months:
+                est_min, est_max = ranges[prog]
+                n_est = int(np.random.randint(est_min, est_max + 1))
+                # pagos aleatorios (centrados en 40/20/30/10 por defectos via Dirichlet)
+                pct_deb, pct_cre, pct_tra, pct_pay = dirichlet_pct([8,4,6,2])  # sesgo a 40/20/30/10
+                colocados = int(np.random.randint(0, max(1, int(n_est * 0.55))))  # hasta ~55%
+
+                rows.append([
+                    date(y, m+1, 1), y, m+1, MONTHS[m],
+                    *P, n_est,
+                    np.random.choice(CANALES, p=[0.6,0.18,0.12,0.10]),
+                    np.random.choice(REGIONES, p=[.55,.09,.07,.05,.09,.05,.03,.07]),
+                    np.random.choice(DISCIP, p=[.52,.08,.11,.07,.07,.10,.05]),
+                    f"{prog[:3].upper()}-{y}-{m+1}",
+                    pct_deb, pct_cre, pct_tra, pct_pay,
+                    colocados
+                ])
+
+    cols = ["FechaInicio","Año","MesNum","Mes","Programa","Modalidad","UnidadPrecio","PrecioUnidadMXN",
+            "DuraciónMeses","DuraciónSemanas","Estudiantes","CanalDominante","Region","Disciplina","Edición",
+            "PctDebito","PctCredito","PctTransfer","PctPayPal","Colocados"]
+    df = pd.DataFrame(rows, columns=cols)
+
+    # asegurar límites y consistencia
+    df[["PctDebito","PctCredito","PctTransfer","PctPayPal"]] = df[["PctDebito","PctCredito","PctTransfer","PctPayPal"]].clip(0,100)
+    df["Colocados"] = df[["Colocados","Estudiantes"]].min(axis=1)
+    return df
+
+# ---------- Estado ----------
+if "df" not in st.session_state:
+    st.session_state.df = seed_data()
+if "notes" not in st.session_state:
+    st.session_state.notes = []
+
+df = st.session_state.df
 
 # ---------- Sidebar ----------
 with st.sidebar:
@@ -141,33 +173,7 @@ with st.sidebar:
     with col_a:
         theme_graphs = st.selectbox("Apariencia gráficos", ["Claro","Oscuro"], index=0)
     with col_b:
-        modo_externo = st.toggle("Modo externo", value=True, help="Oculta edición y notas para presentar a clientes/aliados.")
-
-    # Agregar edición (solo interno)
-    if not modo_externo:
-        with st.expander("➕ Agregar edición rápidamente"):
-            c1,c2 = st.columns(2)
-            with c1:
-                y_new = st.selectbox("Año nuevo", sorted(df["Año"].unique()), key="y_new")
-                prog_new = st.selectbox("Programa nuevo", [p[0] for p in PROGRAMAS], key="prog_new")
-                mes_new = st.selectbox("Mes", MONTHS, key="mes_new")
-                est_new = st.number_input("Estudiantes", 5, 500, 120, key="est_new")
-            with c2:
-                canal_new = st.selectbox("Canal", CANALES, key="canal_new")
-                region_new = st.selectbox("Región", REGIONES, key="reg_new")
-                disc_new = st.selectbox("Disciplina", DISCIP, key="disc_new")
-                fecha_new = date(y_new, MONTHS.index(mes_new)+1, 1)
-            if st.button("Agregar edición", use_container_width=True):
-                P = {p[0]:p for p in PROGRAMAS}[prog_new]
-                new_row = {
-                    "FechaInicio": fecha_new, "Año": y_new, "MesNum": MONTHS.index(mes_new)+1, "Mes": mes_new,
-                    "Programa": P[0], "Modalidad": P[1], "UnidadPrecio": P[2], "PrecioUnidadMXN": P[3],
-                    "DuraciónMeses": P[4], "DuraciónSemanas": P[5], "Estudiantes": est_new,
-                    "CanalDominante": canal_new, "Region": region_new, "Disciplina": disc_new,
-                    "Edición": f"{prog_new[:3].upper()}-{y_new}-{mes_new}"
-                }
-                st.session_state.df = pd.concat([st.session_state.df, pd.DataFrame([new_row])], ignore_index=True)
-                st.toast("Edición agregada ✅")
+        modo_externo = st.toggle("Modo externo", value=False, help="Oculta edición y notas para presentar a clientes/aliados.")
 
 # ---------- Encabezado ----------
 st.markdown(
@@ -180,22 +186,45 @@ st.markdown(
     unsafe_allow_html=True
 )
 
-# ---------- Dataset filtrado ----------
+# ---------- Filtros ----------
 f = df[(df["Año"]==year) & (df["Programa"].isin(progs)) & (df["CanalDominante"].isin(canales)) & (df["Region"].isin(regiones))].copy()
 if f.empty:
     st.warning("No hay datos con los filtros actuales. Ajusta opciones en la barra lateral.")
     st.stop()
 
+# ---------- Derivados ----------
+def normalize_row_pcts(row):
+    p = np.array([row.PctDebito, row.PctCredito, row.PctTransfer, row.PctPayPal], dtype=float)
+    s = p.sum()
+    if s <= 0:
+        p = np.array([40,20,30,10], dtype=float)
+        s = 100
+    p = p / s * 100.0
+    # redondeo y ajuste final a 100
+    r = np.round(p).astype(int)
+    r[0] += (100 - r.sum())
+    return r
+
+pcts = f.apply(normalize_row_pcts, axis=1, result_type="expand")
+pcts.columns = ["PctDebitoN","PctCreditoN","PctTransferN","PctPayPalN"]
+f = pd.concat([f.reset_index(drop=True), pcts], axis=1)
+
+# Ingresos
 f["IngresosMXN"] = f.apply(calc_ingresos, axis=1)
 
+# Conteo de estudiantes por método de pago
+for col, pct_col in [("Debito","PctDebitoN"),("Credito","PctCreditoN"),("Transfer","PctTransferN"),("PayPal","PctPayPalN")]:
+    f[f"Est_{col}"] = (f["Estudiantes"] * f[pct_col] / 100.0).round().astype(int)
+
 # ---------- KPIs ----------
-c1,c2,c3,c4 = st.columns(4)
+tpl = px_template(theme_graphs)
+c1,c2,c3,c4,c5 = st.columns(5)
 with c1:
     st.markdown("<div class='box kpi'><div><h4>Estudiantes (año)</h4>"
                 f"<div class='val'>{int(f['Estudiantes'].sum())}</div></div></div>", unsafe_allow_html=True)
 with c2:
     st.markdown("<div class='box kpi'><div><h4>Ingresos estimados</h4>"
-                f"<div class='val'>${k_formatter(f['IngresosMXN'].sum())} MXN</div></div></div>", unsafe_allow_html=True)
+                f"<div class='val'>${k_formatter(int(f['IngresosMXN'].sum()))} MXN</div></div></div>", unsafe_allow_html=True)
 with c3:
     st.markdown("<div class='box kpi'><div><h4>Ediciones</h4>"
                 f"<div class='val'>{f['Edición'].nunique()}</div></div></div>", unsafe_allow_html=True)
@@ -203,117 +232,129 @@ with c4:
     top_prog = f.groupby("Programa")["Estudiantes"].sum().sort_values(ascending=False).index[0]
     st.markdown("<div class='box kpi'><div><h4>Programa líder</h4>"
                 f"<div class='val'>{top_prog}</div></div></div>", unsafe_allow_html=True)
+with c5:
+    coloc_tot = int(f["Colocados"].sum())
+    tasa_coloc = (coloc_tot / f["Estudiantes"].sum() * 100) if f["Estudiantes"].sum() > 0 else 0
+    st.markdown("<div class='box kpi'><div><h4>Empleabilidad</h4>"
+                f"<div class='val'>{tasa_coloc:.1f}%</div><div class='small'>{coloc_tot} colocados</div></div></div>", unsafe_allow_html=True)
 
 st.markdown("<hr class='sep'/>", unsafe_allow_html=True)
 
 # ---------- Tabs ----------
-tabs = st.tabs(["📊 Overview", "👥 Estudiantes", "💵 Ingresos", "🌍 Regiones & Canales", "🧱 Heatmap", "📝 Datos & Notas"])
-
-tpl = px_template(theme_graphs)
+tabs = st.tabs([
+    "📊 Overview",
+    "👥 Ediciones (editable)",
+    "💵 Ingresos",
+    "🌍 Regiones & Canales",
+    "💳 Pagos & 🎯 Empleabilidad",
+    "🧱 Heatmap",
+    "📝 Datos & Notas"
+])
 
 # ===== Overview =====
 with tabs[0]:
     cA, cB = st.columns([1.3, 1], gap="large")
 
-    # A) Estudiantes por mes x programa (barras agrupadas)
-    A = f.groupby(["MesNum","Mes","Programa"], as_index=False)["Estudiantes"].sum()
-    A = A.sort_values("MesNum")
-    figA = px.bar(
-        A, x="Mes", y="Estudiantes", color="Programa", barmode="group",
-        template=tpl, color_discrete_sequence=PALETTE, text_auto=True,
-        hover_data={"Mes":True,"Programa":True,"Estudiantes":":,"}
-    )
+    A = f.groupby(["MesNum","Mes","Programa"], as_index=False)["Estudiantes"].sum().sort_values("MesNum")
+    figA = px.bar(A, x="Mes", y="Estudiantes", color="Programa", barmode="group",
+                  template=tpl, color_discrete_sequence=PALETTE, text_auto=True,
+                  hover_data={"Mes":True,"Programa":True,"Estudiantes":":,"})
     figA.update_layout(height=360, margin=dict(t=40,b=10,l=10,r=10), legend_title_text="Programa")
-    cA.markdown("**A) Estudiantes por mes × programa**")
+    cA.markdown("**Estudiantes por mes × programa**")
     cA.plotly_chart(figA, use_container_width=True)
     cA.caption("Volumen mensual por programa, considerando los filtros.")
 
-    # B) Tendencia mensual (línea)
     B = f.groupby(["MesNum","Mes"], as_index=False)["Estudiantes"].sum().sort_values("MesNum")
     figB = px.line(B, x="Mes", y="Estudiantes", markers=True, template=tpl)
     figB.update_traces(hovertemplate="Mes: %{x}<br>Estudiantes: %{y:,}")
     figB.update_layout(height=360, margin=dict(t=40,b=10,l=10,r=10))
-    cB.markdown("**B) Tendencia mensual de estudiantes**")
+    cB.markdown("**Tendencia mensual de estudiantes**")
     cB.plotly_chart(figB, use_container_width=True)
-    cB.caption("Evolución de estudiantes por mes durante el año seleccionado.")
+    cB.caption("Evolución de estudiantes durante el año seleccionado.")
 
-    # Conclusiones ejecutivas
+    # Conclusiones rápidas
     st.markdown("### 📌 Conclusiones")
     total_est = int(f["Estudiantes"].sum())
     total_ing = int(f["IngresosMXN"].sum())
-    top_region_row = f.groupby("Region")["Estudiantes"].sum().sort_values(ascending=False).head(1)
-    top_region = top_region_row.index[0] if not top_region_row.empty else "—"
-    top_canal_row = f.groupby("CanalDominante")["Estudiantes"].sum().sort_values(ascending=False).head(1)
-    top_canal = top_canal_row.index[0] if not top_canal_row.empty else "—"
-    st.markdown(
-        f"""
+    top_region = f.groupby("Region")["Estudiantes"].sum().sort_values(ascending=False).index[0]
+    top_canal = f.groupby("CanalDominante")["Estudiantes"].sum().sort_values(ascending=False).index[0]
+    st.markdown(f"""
 - **Total estudiantes {year}:** {total_est:,}
-- **Ingresos estimados:** ${total_ing:,.0f} MXN  _(estimación según duración y unidad de cobro)_
+- **Ingresos estimados:** ${total_ing:,.0f} MXN
 - **Programa líder:** {top_prog}
 - **Región más activa:** {top_region}
 - **Canal dominante:** {top_canal}
-"""
-    )
+- **Empleabilidad (colocados/estudiantes):** {tasa_coloc:.1f}%
+""")
 
-# ===== Estudiantes =====
+# ===== Ediciones (editable) =====
 with tabs[1]:
-    left, right = st.columns([1.2, 1], gap="large")
+    st.markdown("**Ediciones del año** " + ("(solo lectura en modo externo)" if modo_externo else "(editable)"))
 
-    # Tabla editable (solo interno); si externo, tabla de solo lectura
-    editable_cols = {
+    show_cols = [
+        "FechaInicio","Año","Mes","Programa","Modalidad","UnidadPrecio","PrecioUnidadMXN",
+        "DuraciónMeses","DuraciónSemanas","Estudiantes",
+        "PctDebito","PctCredito","PctTransfer","PctPayPal",
+        "Colocados",
+        "CanalDominante","Region","Edición"
+    ]
+    base_table = f[show_cols].copy()
+
+    # configs
+    cfg = {
         "Estudiantes": st.column_config.NumberColumn(min_value=1, max_value=1000, step=1),
         "PrecioUnidadMXN": st.column_config.NumberColumn(min_value=100, max_value=10000, step=50),
+        "PctDebito": st.column_config.NumberColumn(min_value=0, max_value=100, step=1, help="Porcentaje sobre estudiantes"),
+        "PctCredito": st.column_config.NumberColumn(min_value=0, max_value=100, step=1),
+        "PctTransfer": st.column_config.NumberColumn(min_value=0, max_value=100, step=1),
+        "PctPayPal": st.column_config.NumberColumn(min_value=0, max_value=100, step=1),
+        "Colocados": st.column_config.NumberColumn(min_value=0, max_value=int(base_table["Estudiantes"].max())),
         "CanalDominante": st.column_config.SelectboxColumn(options=CANALES),
         "Region": st.column_config.SelectboxColumn(options=REGIONES),
-        "Nota": st.column_config.TextColumn(help="Comentarios por edición")
     }
-    show_cols = ["FechaInicio","Año","Mes","Programa","Modalidad","UnidadPrecio","PrecioUnidadMXN",
-                 "DuraciónMeses","DuraciónSemanas","Estudiantes","CanalDominante","Region","Edición"]
 
-    left.markdown("**Ediciones**" + ("" if modo_externo else " (editable)"))
-    base_table = f.assign(Nota="")[show_cols + ["Nota"]]
     if modo_externo:
-        left.dataframe(base_table, hide_index=True, use_container_width=True)
+        st.dataframe(base_table, use_container_width=True, hide_index=True)
     else:
-        edit_df = st.data_editor(base_table, column_config=editable_cols, hide_index=True, use_container_width=True)
-        left.caption("Edita estudiantes/precio/canal/región por edición y presiona “Aplicar cambios”.")
-        if left.button("Aplicar cambios a la base", type="primary"):
-            base = st.session_state.df
-            merged = base.merge(edit_df[["Edición","Estudiantes","PrecioUnidadMXN","CanalDominante","Region"]],
-                                on="Edición", how="left", suffixes=("","_new"))
-            for col in ["Estudiantes","PrecioUnidadMXN","CanalDominante","Region"]:
-                merged[col] = np.where(merged[col+"_new"].notna(), merged[col+"_new"], merged[col])
-                merged.drop(columns=[col+"_new"], inplace=True)
-            st.session_state.df = merged
-            st.toast("Cambios aplicados ✅")
-            st.rerun()
+        edit_df = st.data_editor(base_table, column_config=cfg, hide_index=True, use_container_width=True, num_rows="fixed")
+        c1, c2 = st.columns([1,1])
+        with c1:
+            if st.button("Aplicar cambios a la base", type="primary"):
+                # Fusionar por edición
+                base = st.session_state.df
+                cols_update = ["Estudiantes","PrecioUnidadMXN","PctDebito","PctCredito","PctTransfer","PctPayPal","Colocados","CanalDominante","Region"]
+                merged = base.merge(edit_df[["Edición"]+cols_update], on="Edición", how="left", suffixes=("","_new"))
+                for col in cols_update:
+                    merged[col] = np.where(merged[col+"_new"].notna(), merged[col+"_new"], merged[col])
+                    merged.drop(columns=[col+"_new"], inplace=True)
 
-    # Distribución por programa (barra horizontal)
-    P = f.groupby("Programa", as_index=False)["Estudiantes"].sum().sort_values("Estudiantes")
-    figP = px.bar(P, x="Estudiantes", y="Programa", orientation="h",
-                  template=tpl, color_discrete_sequence=PALETTE, text="Estudiantes")
-    figP.update_traces(texttemplate="%{text:,}", hovertemplate="%{y}<br>Estudiantes: %{x:,}")
-    figP.update_layout(height=max(260, 32*len(P)), margin=dict(t=30,b=10,l=10,r=10))
-    right.markdown("**Distribución por programa**")
-    right.plotly_chart(figP, use_container_width=True)
-    right.caption("Acumulado de estudiantes por programa con filtros activos.")
+                # normalizar porcentajes a 100 por edición y clips
+                for i, row in merged.iterrows():
+                    p = np.array([row["PctDebito"], row["PctCredito"], row["PctTransfer"], row["PctPayPal"]], dtype=float)
+                    s = p.sum()
+                    if s <= 0: p = np.array([40,20,30,10], dtype=float); s = 100
+                    p = p / s * 100.0
+                    r = np.round(p).astype(int); r[0] += (100 - r.sum())
+                    merged.loc[i, ["PctDebito","PctCredito","PctTransfer","PctPayPal"]] = r
+                    merged.loc[i, "Colocados"] = min(int(merged.loc[i, "Colocados"]), int(merged.loc[i, "Estudiantes"]))
+                st.session_state.df = merged
+                st.toast("Cambios aplicados ✅")
+                st.rerun()
+        with c2:
+            st.info("Los porcentajes de pago se normalizan automáticamente a 100% al aplicar cambios.")
 
 # ===== Ingresos =====
 with tabs[2]:
     c1, c2 = st.columns([1.3, 1], gap="large")
-
-    # Ingresos por mes y programa (área apilada)
     R = f.groupby(["MesNum","Mes","Programa"], as_index=False)["IngresosMXN"].sum().sort_values("MesNum")
     figR = px.area(R, x="Mes", y="IngresosMXN", color="Programa",
-                   template=tpl, color_discrete_sequence=PALETTE,
-                   groupnorm=None)
+                   template=tpl, color_discrete_sequence=PALETTE)
     figR.update_traces(hovertemplate="Mes: %{x}<br>%{legendgroup}: $%{y:,.0f} MXN")
     figR.update_layout(height=360, margin=dict(t=40,b=10,l=10,r=10), yaxis_title="MXN", legend_title_text="Programa")
     c1.markdown("**Ingresos por mes × programa (estimado)**")
     c1.plotly_chart(figR, use_container_width=True)
-    c1.caption("Cálculo según unidad de cobro (MES/SEM) y duración definida por programa.")
+    c1.caption("Según unidad de cobro (MES/SEM) y duración por programa.")
 
-    # Indicadores
     tkt = int(f["IngresosMXN"].sum() / f["Estudiantes"].sum()) if f["Estudiantes"].sum() > 0 else 0
     c2.markdown("**Indicadores de monetización**")
     c2.metric("Ticket estimado por estudiante", f"${k_formatter(tkt)} MXN")
@@ -323,8 +364,6 @@ with tabs[2]:
 # ===== Regiones & Canales =====
 with tabs[3]:
     left, right = st.columns(2, gap="large")
-
-    # Regiones (suma de estudiantes)
     G = f.groupby("Region", as_index=False)["Estudiantes"].sum().rename(columns={"Estudiantes":"TotalEstudiantes"}).sort_values("TotalEstudiantes")
     figG = px.bar(G, x="TotalEstudiantes", y="Region", orientation="h",
                   template=tpl, color_discrete_sequence=PALETTE, text="TotalEstudiantes")
@@ -332,48 +371,72 @@ with tabs[3]:
     figG.update_layout(height=max(260, 28*len(G)), margin=dict(t=30,b=10,l=10,r=10))
     left.markdown("**Top regiones (por estudiantes)**")
     left.plotly_chart(figG, use_container_width=True)
-    left.caption("Suma de estudiantes por región con filtros activos.")
+    left.caption("Suma de estudiantes por región.")
 
-    # Canales (suma de estudiantes)
-    C = f.groupby("CanalDominante", as_index=False)["Estudiantes"].sum().rename(columns={"Estudiantes":"TotalEstudiantes"}).sort_values("TotalEstudiantes", ascending=False)
+    C = f.groupby("CanalDominante", as_index=False)["Estudiantes"].sum().rename(columns={"Estudiantes":"TotalEstudiantes"})
     figC = px.bar(C, x="CanalDominante", y="TotalEstudiantes",
                   template=tpl, color_discrete_sequence=PALETTE, text="TotalEstudiantes")
     figC.update_traces(texttemplate="%{text:,}", hovertemplate="%{x}<br>Estudiantes: %{y:,}")
     figC.update_layout(height=320, margin=dict(t=30,b=10,l=10,r=10), xaxis_title="Canal", yaxis_title="Estudiantes")
     right.markdown("**Canales de adquisición (por estudiantes)**")
     right.plotly_chart(figC, use_container_width=True)
-    right.caption("Principales fuentes de adquisición para las ediciones filtradas.")
+    right.caption("Principales fuentes de adquisición.")
+
+# ===== Pagos & Empleabilidad =====
+with tabs[4]:
+    left, right = st.columns([1,1], gap="large")
+
+    # Mezcla de pagos (por estudiantes)
+    pagos = pd.DataFrame({
+        "Método": ["Débito","Crédito","Transferencia","PayPal"],
+        "Estudiantes": [
+            f["Est_Debito"].sum(),
+            f["Est_Credito"].sum(),
+            f["Est_Transfer"].sum(),
+            f["Est_PayPal"].sum(),
+        ]
+    })
+    figPie = px.pie(pagos, names="Método", values="Estudiantes", template=tpl, hole=0.45)
+    figPie.update_traces(textinfo="percent+label", hovertemplate="%{label}: %{value:,} estudiantes")
+    figPie.update_layout(height=360, margin=dict(t=30,b=10,l=10,r=10))
+    left.markdown("**Mezcla de métodos de pago (estudiantes)**")
+    left.plotly_chart(figPie, use_container_width=True)
+
+    # Colocación por programa
+    emp = f.groupby("Programa", as_index=False).agg(Estudiantes=("Estudiantes","sum"), Colocados=("Colocados","sum"))
+    emp["Tasa"] = np.where(emp["Estudiantes"]>0, emp["Colocados"]/emp["Estudiantes"]*100, 0)
+    figEmp = px.bar(emp.sort_values("Tasa"), x="Tasa", y="Programa", orientation="h",
+                    template=tpl, color_discrete_sequence=PALETTE, text=emp["Tasa"].map(lambda x:f"{x:.1f}%"))
+    figEmp.update_traces(hovertemplate="%{y}<br>Tasa: %{x:.1f}%<br>Colocados: %{customdata[0]:,} / %{customdata[1]:,}",
+                         customdata=np.stack([emp["Colocados"], emp["Estudiantes"]], axis=1))
+    figEmp.update_layout(height=max(260, 30*len(emp)), margin=dict(t=30,b=10,l=10,r=10), xaxis_title="Tasa de colocación (%)")
+    right.markdown("**Empleabilidad por programa**")
+    right.plotly_chart(figEmp, use_container_width=True)
+    right.caption("Colocados / Estudiantes por programa (editable por edición).")
 
 # ===== Heatmap =====
-with tabs[4]:
+with tabs[5]:
     H = f.groupby(["MesNum","Mes","Programa"], as_index=False)["Estudiantes"].sum()
-    # Pivot a matriz Mes x Programa
     pivot = H.pivot_table(index="Programa", columns="Mes", values="Estudiantes", aggfunc="sum").reindex(columns=MONTHS).fillna(0)
     heat = go.Figure(data=go.Heatmap(
         z=pivot.values, x=pivot.columns, y=pivot.index,
         colorscale="Blues", hovertemplate="Programa: %{y}<br>Mes: %{x}<br>Estudiantes: %{z}<extra></extra>",
         colorbar=dict(title="Estudiantes")
     ))
-    # Etiquetas sobre celdas
-    heat.add_trace(go.Heatmap(
-        z=pivot.values, x=pivot.columns, y=pivot.index,
-        colorscale=[[0, 'rgba(0,0,0,0)'], [1, 'rgba(0,0,0,0)']], showscale=False,
-        text=pivot.values, texttemplate="%{text:.0f}", hoverinfo="skip"
-    ))
     heat.update_layout(template=tpl, height=max(260, 28*len(pivot.index)), margin=dict(t=40,b=10,l=10,r=10))
-    st.markdown("**Heatmap Mes × Programa (intensidad = estudiantes)**")
+    st.markdown("**Heatmap Mes × Programa**")
     st.plotly_chart(heat, use_container_width=True)
-    st.caption("Rápida detección de picos y valles por programa y mes.")
+    st.caption("Picos y valles por programa y mes.")
 
 # ===== Datos & Notas =====
-with tabs[5]:
+with tabs[6]:
     t1, t2 = st.tabs(["📄 Datos (filtrados)", "🗒️ Notas del equipo"])
     with t1:
-        st.markdown("**Tabla base (con ingresos)**")
+        st.markdown("**Tabla base (con ingresos y pagos normalizados)**")
         show = f.copy()
         show["IngresosMXN"] = show["IngresosMXN"].round(0).astype(int)
-        st.dataframe(show.sort_values(["MesNum","Programa"]), use_container_width=True, hide_index=True)
-        st.caption("Descarga la base filtrada para respaldos o análisis adicional.")
+        show = show.sort_values(["MesNum","Programa"])
+        st.dataframe(show, use_container_width=True, hide_index=True)
         st.download_button("Descargar CSV filtrado", show.to_csv(index=False).encode("utf-8"),
                            file_name=f"cursos_{year}.csv", mime="text/csv")
     with t2:
@@ -384,7 +447,7 @@ with tabs[5]:
                 nc1, nc2 = st.columns([3,1])
                 with nc1:
                     note_text = st.text_area("Escribe una nota (visible para el equipo):", height=120,
-                                             placeholder="Ej. Revisar pricing de MCP y pauta con micro-influencers…")
+                                             placeholder="Ej. Ajustar pauta para crédito; seguimiento empleabilidad en DS…")
                 with nc2:
                     note_prog = st.selectbox("Programa", ["(General)"]+sorted(df["Programa"].unique()))
                     note_tag  = st.selectbox("Etiqueta", ["riesgo","idea","tarea","seguimiento","dato"])
@@ -409,13 +472,12 @@ with tabs[5]:
             else:
                 st.info("Aún no hay notas. Usa el formulario para registrar hallazgos, tareas o ideas.")
 
-# ---------- Pie / Ayudas ----------
+# ---------- Pie ----------
 st.markdown("<hr class='sep'/>", unsafe_allow_html=True)
 with st.expander("ℹ️ ¿Qué incluye este dashboard?"):
     st.markdown("""
-- **KPIs** de estudiantes, ingresos estimados, ediciones y programa líder.
-- **Gráficos Plotly**: barras agrupadas por mes/programa, línea mensual, áreas por ingresos, barras por región/canal y **heatmap**.
-- **Modo Externo** para presentación (oculta edición y notas).
-- **Editor de datos** (solo interno) y **Notas del equipo** con exportación.
-- Estética limpia, adaptable a claro/oscuro y con herramienta de descarga en la barra de cada gráfico.
+- **KPIs**: estudiantes, ingresos, ediciones, programa líder y **empleabilidad**.
+- **Plotly**: barras por mes/programa, línea mensual, áreas de ingresos, barras por región/canal, **mezcla de pagos** y **empleabilidad**, y **heatmap**.
+- **Edición por edición**: estudiantes, precios, **porcentajes de pago** (normalizados a 100%) y **colocados**.
+- **Modo externo** para presentar sin edición/Notas.
 """)
